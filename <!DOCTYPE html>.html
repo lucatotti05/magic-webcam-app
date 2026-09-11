@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Magic Webcam App</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <h1>Videochiamata Test</h1>
+
+  <p>Il tuo ID: <span id="my-id">caricamento...</span></p>
+  <p>Link da condividere: <a id="share-link" href="#"></a></p>
+
+  <div style="display: flex; gap: 20px; margin-top: 20px;">
+    <div>
+      <p>Tu</p>
+      <video id="my-video" autoplay playsinline muted width="300"></video>
+      <div style="margin-top: 10px;">
+        <button id="my-life-minus">-</button>
+        <span id="my-life">40</span>
+        <button id="my-life-plus">+</button>
+      </div>
+      <button id="roll-dice-btn">Tira dado</button>
+      <span id="my-dice-result"></span>
+    </div>
+    <div>
+      <p>L'altro</p>
+      <video id="remote-video" autoplay playsinline width="300"></video>
+      <div style="margin-top: 10px;">
+        Vita: <span id="remote-life">40</span>
+      </div>
+      <span id="remote-dice-result"></span>
+    </div>
+  </div>
+
+  <script>
+    const myVideo = document.getElementById('my-video');
+    const remoteVideo = document.getElementById('remote-video');
+    const myIdSpan = document.getElementById('my-id');
+    const shareLink = document.getElementById('share-link');
+    const myLifeSpan = document.getElementById('my-life');
+    const remoteLifeSpan = document.getElementById('remote-life');
+    const myDiceResult = document.getElementById('my-dice-result');
+    const remoteDiceResult = document.getElementById('remote-dice-result');
+
+    let myStream;
+    let dataConn = null; // canale dati per sincronizzare vita/dadi
+    let myLife = 40;
+
+    const peer = new Peer();
+
+    function sendData(msg) {
+      if (dataConn && dataConn.open) {
+        dataConn.send(msg);
+      }
+    }
+
+    function handleIncomingData(msg) {
+      if (msg.type === 'life') {
+        remoteLifeSpan.textContent = msg.value;
+      } else if (msg.type === 'dice') {
+        remoteDiceResult.textContent = `🎲 ${msg.value}`;
+      }
+    }
+
+    function setupDataConnection(conn) {
+      dataConn = conn;
+      dataConn.on('data', handleIncomingData);
+    }
+
+    peer.on('open', (id) => {
+      myIdSpan.textContent = id;
+      const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
+      shareLink.href = link;
+      shareLink.textContent = link;
+    });
+
+    peer.on('call', (call) => {
+      call.answer(myStream);
+      call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
+      });
+    });
+
+    peer.on('connection', (conn) => {
+      setupDataConnection(conn);
+    });
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        myStream = stream;
+        myVideo.srcObject = stream;
+
+        const params = new URLSearchParams(window.location.search);
+        const targetId = params.get('connect');
+        if (targetId) {
+          const call = peer.call(targetId, myStream);
+          call.on('stream', (remoteStream) => {
+            remoteVideo.srcObject = remoteStream;
+          });
+          const conn = peer.connect(targetId);
+          conn.on('open', () => setupDataConnection(conn));
+        }
+      })
+      .catch((err) => console.error('Errore webcam:', err));
+
+    document.getElementById('my-life-plus').addEventListener('click', () => {
+      myLife++;
+      myLifeSpan.textContent = myLife;
+      sendData({ type: 'life', value: myLife });
+    });
+
+    document.getElementById('my-life-minus').addEventListener('click', () => {
+      myLife--;
+      myLifeSpan.textContent = myLife;
+      sendData({ type: 'life', value: myLife });
+    });
+
+    document.getElementById('roll-dice-btn').addEventListener('click', () => {
+      const result = Math.floor(Math.random() * 6) + 1;
+      myDiceResult.textContent = `🎲 ${result}`;
+      sendData({ type: 'dice', value: result });
+    });
+  </script>
+</body>
+</html>
