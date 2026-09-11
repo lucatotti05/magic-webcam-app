@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Videochiamata Test</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <h1>Videochiamata Test</h1>
+
+  <p>Il tuo ID: <span id="my-id">caricamento...</span></p>
+  <p>Link da condividere: <a id="share-link" href="#"></a></p>
+
+  <div style="display: flex; gap: 20px; margin-top: 20px;">
+    <div>
+      <p>Tu</p>
+      <video id="my-video" autoplay playsinline muted width="300"></video>
+    </div>
+    <div>
+      <p>L'altro</p>
+      <video id="remote-video" autoplay playsinline width="300"></video>
+    </div>
+  </div>
+
+  <script>
+    const myVideo = document.getElementById('my-video');
+    const remoteVideo = document.getElementById('remote-video');
+    const myIdSpan = document.getElementById('my-id');
+    const shareLink = document.getElementById('share-link');
+    let myStream;
+
+    const peer = new Peer();
+
+    peer.on('open', (id) => {
+      myIdSpan.textContent = id;
+
+      // Costruisci un link che contiene il tuo ID come parametro
+      const link = `${window.location.origin}${window.location.pathname}?connect=${id}`;
+      shareLink.href = link;
+      shareLink.textContent = link;
+    });
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        myStream = stream;
+        myVideo.srcObject = stream;
+
+        // Se l'URL contiene ?connect=qualcosa, chiama automaticamente
+        const params = new URLSearchParams(window.location.search);
+        const targetId = params.get('connect');
+        if (targetId) {
+          const call = peer.call(targetId, myStream);
+          call.on('stream', (remoteStream) => {
+            remoteVideo.srcObject = remoteStream;
+          });
+        }
+      })
+      .catch((err) => console.error('Errore webcam:', err));
+
+    peer.on('call', (call) => {
+      call.answer(myStream);
+      call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
+      });
+    });
+  </script>
+</body>
+</html>
